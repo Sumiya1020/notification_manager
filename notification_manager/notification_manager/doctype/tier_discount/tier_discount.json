@@ -1,0 +1,30 @@
+{
+    "name": "Tier Discount",
+    "doctype": "DocType",
+    "istable": 1,
+    "module": "Notification Manager",
+    "fields": [
+        {
+            "fieldname": "loyalty_program",
+            "label": "Loyalty Program",
+            "fieldtype": "Link",
+            "options": "Loyalty Program",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "tier_name",
+            "label": "Tier Name",
+            "fieldtype": "Data",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "discount_value",
+            "label": "Discount Value",
+            "fieldtype": "Float",
+            "reqd": 1,
+            "in_list_view": 1
+        }
+    ]
+}

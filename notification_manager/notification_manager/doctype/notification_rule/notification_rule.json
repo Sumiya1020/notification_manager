@@ -1,0 +1,85 @@
+{
+    "name": "Notification Rule",
+    "doctype": "DocType",
+    "module": "Notification Manager",
+    "custom": 1,
+    "fields": [
+        {
+            "fieldname": "rule_name",
+            "label": "Rule Name",
+            "fieldtype": "Data",
+            "reqd": 1,
+            "unique": 1
+        },
+        {
+            "fieldname": "enabled",
+            "label": "Enabled",
+            "fieldtype": "Check",
+            "default": 1
+        },
+        {
+            "fieldname": "event_type",
+            "label": "Event Type",
+            "fieldtype": "Select",
+            "options": "New Registration\nBirthday\nMembership Anniversary",
+            "reqd": 1
+        },
+        {
+            "fieldname": "discount_section",
+            "label": "Discount Settings",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "discount_type",
+            "label": "Discount Type",
+            "fieldtype": "Select",
+            "options": "Percentage\nAmount",
+            "reqd": 1
+        },
+        {
+            "fieldname": "loyalty_program",
+            "label": "Loyalty Program",
+            "fieldtype": "Link",
+            "options": "Loyalty Program"
+        },
+        {
+            "fieldname": "discount_value",
+            "label": "Default Discount Value",
+            "fieldtype": "Float"
+        },
+        {
+            "fieldname": "tier_discounts",
+            "label": "Tier Discounts",
+            "fieldtype": "Table",
+            "options": "Tier Discount"
+        },
+        {
+            "fieldname": "validity_days",
+            "label": "Validity Days",
+            "fieldtype": "Int",
+            "default": 30,
+            "reqd": 1
+        },
+        {
+            "fieldname": "message_section",
+            "label": "Message Settings",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "message_template",
+            "label": "Message Template",
+            "fieldtype": "Text Editor",
+            "reqd": 1,
+            "description": "Variables: {customer_name}, {coupon_code}, {discount_value}, {validity_days}, {loyalty_tier}"
+        }
+    ],
+    "permissions": [
+        {
+            "role": "System Manager",
+            "read": 1,
+            "write": 1,
+            "create": 1,
+            "delete": 1
+        }
+    ]
+}

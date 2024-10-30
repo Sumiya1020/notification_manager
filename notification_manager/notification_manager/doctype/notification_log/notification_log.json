@@ -1,0 +1,59 @@
+{
+    "name": "Notification Log",
+    "doctype": "DocType",
+    "module": "Notification Manager",
+    "track_changes": 1,
+    "fields": [
+        {
+            "fieldname": "customer",
+            "label": "Customer",
+            "fieldtype": "Link",
+            "options": "Customer",
+            "reqd": 1
+        },
+        {
+            "fieldname": "event_type",
+            "label": "Event Type",
+            "fieldtype": "Data",
+            "reqd": 1
+        },
+        {
+            "fieldname": "loyalty_program",
+            "label": "Loyalty Program",
+            "fieldtype": "Link",
+            "options": "Loyalty Program"
+        },
+        {
+            "fieldname": "loyalty_tier",
+            "label": "Loyalty Tier",
+            "fieldtype": "Data"
+        },
+        {
+            "fieldname": "coupon",
+            "label": "Generated Coupon",
+            "fieldtype": "Link",
+            "options": "Coupon Code"
+        },
+        {
+            "fieldname": "status",
+            "label": "Status",
+            "fieldtype": "Select",
+            "options": "Success\nFailed",
+            "reqd": 1
+        },
+        {
+            "fieldname": "message",
+            "label": "Message",
+            "fieldtype": "Text"
+        }
+    ],
+    "permissions": [
+        {
+            "role": "System Manager",
+            "read": 1,
+            "write": 1,
+            "create": 1,
+            "delete": 1
+        }
+    ]
+}

@@ -1,0 +1,143 @@
+### App Versions
+```
+{
+	"erpnext": "15.38.0",
+	"frappe": "15.43.0",
+	"notification_manager": "0.0.1"
+}
+```
+### Route
+```
+Form/Customer/new-customer-uealhzrhoe
+```
+### Traceback
+```
+Traceback (most recent call last):
+  File "apps/frappe/frappe/app.py", line 114, in application
+    response = frappe.api.handle(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/api/__init__.py", line 49, in handle
+    data = endpoint(**arguments)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/api/v1.py", line 36, in handle_rpc_call
+    return frappe.handler.handle()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/handler.py", line 49, in handle
+    data = execute_cmd(cmd)
+           ^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/handler.py", line 85, in execute_cmd
+    return frappe.call(method, **frappe.form_dict)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/__init__.py", line 1775, in call
+    return fn(*args, **newargs)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/utils/typing_validations.py", line 31, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/desk/form/save.py", line 39, in savedocs
+    doc.save()
+  File "apps/frappe/frappe/model/document.py", line 337, in save
+    return self._save(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/model/document.py", line 359, in _save
+    return self.insert()
+           ^^^^^^^^^^^^^
+  File "apps/frappe/frappe/model/document.py", line 308, in insert
+    self.run_method("after_insert")
+  File "apps/frappe/frappe/model/document.py", line 962, in run_method
+    out = Document.hook(fn)(self, *args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/model/document.py", line 1322, in composer
+    return composed(self, method, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/model/document.py", line 1306, in runner
+    add_to_return_value(self, f(self, method, *args, **kwargs))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/notification_manager/notification_manager/notification_manager/utils.py", line 187, in on_customer_create
+    manager.send_notification(doc, "New Registration")
+  File "apps/notification_manager/notification_manager/notification_manager/utils.py", line 86, in send_notification
+    self.log_notification(customer, event_type, "Failed", "No mobile number")
+  File "apps/notification_manager/notification_manager/notification_manager/utils.py", line 148, in log_notification
+    }).insert(ignore_permissions=True)
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/model/document.py", line 308, in insert
+    self.run_method("after_insert")
+  File "apps/frappe/frappe/model/document.py", line 962, in run_method
+    out = Document.hook(fn)(self, *args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/model/document.py", line 1322, in composer
+    return composed(self, method, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/model/document.py", line 1304, in runner
+    add_to_return_value(self, fn(self, *args, **kwargs))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/model/document.py", line 959, in fn
+    return method_object(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/notification_manager/notification_manager/notification_manager/doctype/notification_log/notification_log.py", line 22, in after_insert
+  File "apps/frappe/frappe/database/database.py", line 987, in set_value
+    query.run(debug=debug)
+  File "apps/frappe/frappe/query_builder/utils.py", line 87, in execute_query
+    result = frappe.db.sql(query, params, *args, **kwargs)  # nosemgrep
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/database/database.py", line 227, in sql
+    self._cursor.execute(query, values)
+  File "env/lib/python3.11/site-packages/pymysql/cursors.py", line 153, in execute
+    result = self._query(query)
+             ^^^^^^^^^^^^^^^^^^
+  File "env/lib/python3.11/site-packages/pymysql/cursors.py", line 322, in _query
+    conn.query(q)
+  File "env/lib/python3.11/site-packages/pymysql/connections.py", line 563, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "env/lib/python3.11/site-packages/pymysql/connections.py", line 825, in _read_query_result
+    result.read()
+  File "env/lib/python3.11/site-packages/pymysql/connections.py", line 1199, in read
+    first_packet = self.connection._read_packet()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "env/lib/python3.11/site-packages/pymysql/connections.py", line 775, in _read_packet
+    packet.raise_for_error()
+  File "env/lib/python3.11/site-packages/pymysql/protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+  File "env/lib/python3.11/site-packages/pymysql/err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.OperationalError: (1054, "Unknown column 'total_notifications' in 'field list'")
+
+```
+### Request Data
+```
+{
+	"type": "POST",
+	"args": {
+		"doc": "{\"docstatus\":0,\"doctype\":\"Customer\",\"name\":\"new-customer-mjktkwbbdw\",\"__islocal\":1,\"__unsaved\":1,\"owner\":\"Administrator\",\"naming_series\":\"CUST-.YYYY.-\",\"customer_type\":\"Individual\",\"customer_group\":\"Commercial\",\"territory\":\"Mongolia\",\"is_internal_customer\":0,\"companies\":[],\"language\":\"en\",\"credit_limits\":[],\"accounts\":[],\"sales_team\":[],\"so_required\":0,\"dn_required\":0,\"is_frozen\":0,\"disabled\":0,\"portal_users\":[],\"customer_name\":\"sumiyasdfldksajf\",\"gender\":\"Male\",\"custom_member_date\":\"2024-10-30\",\"mobile_no\":\"\",\"email_id\":\"\",\"customer_primary_contact\":\"Sumiyasdfasdlkjf;\"}",
+		"action": "Save"
+	},
+	"btn": {
+		"jQuery370084557567415754691": {
+			"events": {
+				"click": [
+					{
+						"type": "click",
+						"origType": "click",
+						"guid": 10105,
+						"namespace": ""
+					}
+				]
+			}
+		}
+	},
+	"freeze": true,
+	"headers": {},
+	"error_handlers": {},
+	"url": "/api/method/frappe.desk.form.save.savedocs",
+	"request_id": null
+}
+```
+### Response Data
+```
+{
+	"exception": "pymysql.err.OperationalError: (1054, \"Unknown column 'total_notifications' in 'field list'\")",
+	"exc_type": "OperationalError",
+	"_exc_source": "notification_manager (app)"
+}
+```
