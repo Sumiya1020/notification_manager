@@ -22,7 +22,7 @@ class NotificationManager:
             return None
             
         loyalty_program = frappe.get_doc("Loyalty Program", customer_doc.loyalty_program)
-        customer_points = self.get_customer_loyalty_points(customer)
+        customer_points = 0
         
         # Get the tier discount settings from the notification rule
         tier_discounts = {d.tier_name: d.discount_value for d in rule.tier_discounts}
@@ -35,26 +35,22 @@ class NotificationManager:
                     current_tier = tier.name
                     
         return tier_discounts.get(current_tier)
-    
-    def get_customer_loyalty_points(self, customer):
-        # Get customer's current loyalty points
-        points = frappe.db.get_value("Customer", customer, "loyalty_points") or 0
-        return points
 
     def create_coupon(self, customer, rule):
         """Create coupon based on notification rule"""
-        discount_value = self.get_loyalty_tier_discount(customer, rule)
+        discount_value = 0
         
         coupon = frappe.get_doc({
             "doctype": "Coupon Code",
             "coupon_name": f"{rule.event_type[:3].upper()}{customer.name[:5]}{today().replace('-', '')}",
-            "coupon_type": rule.discount_type,
+            "coupon_type": "Gift Card",
             "discount_percentage": discount_value if rule.discount_type == "Percentage" else 0,
             "discount_amount": discount_value if rule.discount_type == "Amount" else 0,
             "valid_from": today(),
             "valid_upto": add_days(today(), rule.validity_days),
             "customer": customer.name,
-            "maximum_use": 1
+            "maximum_use": 1,
+            "pricing_rule": "PRLE-0005"
         })
         coupon.insert(ignore_permissions=True)
         return coupon
@@ -62,7 +58,7 @@ class NotificationManager:
     def get_customer_tier(self, customer):
         """Get customer's current loyalty tier name"""
         if not customer.loyalty_program:
-            return "Basic"
+            return "Classic"
 
         loyalty_program = frappe.get_doc("Loyalty Program", customer.loyalty_program)
         points = frappe.db.sql("""
@@ -78,7 +74,7 @@ class NotificationManager:
             if current_points >= tier.min_spent:
                 return tier.name
 
-        return "Basic"
+        return "Classic"
 
     def send_notification(self, customer, event_type):
         """Send notification based on event type"""
@@ -110,8 +106,8 @@ class NotificationManager:
             # Send SMS
             send_sms(
                 receiver_list=[customer.mobile_no],
-                msg=message,
-                sender_name=self.sms_settings.sms_sender_name
+                msg=message
+                # sender_name=self.sms_settings.sms_sender_name
             )
 
             # Log success
@@ -125,6 +121,16 @@ class NotificationManager:
 
         except Exception as e:
             self.log_notification(customer, event_type, "Failed", str(e))
+            
+            frappe.log_error(
+                title='Error occured in notification send.',
+                message=f"""
+                Method: {'send_notification' or 'Not Specified'}
+                Error: {e}
+                """,
+                reference_doctype="Notification Rule"
+            )
+
             return False
 
     def get_rule(self, event_type):
