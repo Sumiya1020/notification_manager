@@ -8,6 +8,121 @@ class NotificationManager:
         self.sms_settings = frappe.get_doc("SMS Settings")
         self.load_rules()
 
+    def send_notification(self, customer, event_type):
+        """Send notification based on event type"""
+        if not customer.mobile_no:
+            self.log_notification(customer, event_type, "Failed", "No mobile number")
+            return False
+
+        rule = self.get_rule(event_type)
+        if not rule:
+            self.log_notification(customer, event_type, "Failed", "No rule found")
+            return False
+
+        try:
+            # Prepare message
+            message = rule.message_template
+
+            # Send SMS
+            send_sms(
+                receiver_list=[customer.mobile_no],
+                msg=message
+                # sender_name=self.sms_settings.sms_sender_name
+            )
+
+            # Log success
+            self.log_notification(
+                customer, event_type, "Success",
+                f"Coupon: ",
+                None,
+                loyalty_tier
+            )
+            return True
+
+        except Exception as e:
+            self.log_notification(customer, event_type, "Failed", str(e))
+            
+            frappe.log_error(
+                title='Error occured in notification send.',
+                message=f"""
+                Method: {'send_notification' or 'Not Specified'}
+                Error: {e}
+                """,
+                reference_doctype="Notification Rule"
+            )
+
+            return False
+        
+    
+    def send_tier_notification(self, customer, event_type):
+        """Send notification with tier-specific discount values"""
+        if not customer.mobile_no:
+            self.log_notification(customer, event_type, "Failed", "No mobile number")
+            return False
+
+        rule = self.get_rule(event_type)
+        if not rule:
+            self.log_notification(customer, event_type, "Failed", "No rule found")
+            return False
+
+        try:
+            # Get customer's current tier
+            customer_tier = customer.loyalty_program_tier
+            
+            # Find matching tier discount
+            tier_discount = None
+            for td in rule.tier_discounts:
+                if td.tier_name == customer_tier:
+                    tier_discount = td
+                    break
+            
+            # Use default discount value if no tier-specific discount found
+            discount_value = tier_discount.discount_value if tier_discount else rule.discount_value
+            
+            # Prepare message by replacing placeholders
+            message = rule.message_template.replace(
+                "{discount_value}", str(discount_value)
+            ).replace(
+                "{customer_name}", customer.customer_name
+            ).replace(
+                "{validity_days}", str(rule.validity_days)
+            ).replace(
+                "{loyalty_tier}", customer_tier or "Classic"
+            )
+
+            # Send SMS
+            send_sms(
+                receiver_list=[customer.mobile_no],
+                msg=message
+            )
+
+            # Log success
+            self.log_notification(
+                customer, 
+                event_type, 
+                "Success",
+                f"Notification sent with discount value: {discount_value}",
+                None,
+                customer_tier
+            )
+            return True
+
+        except Exception as e:
+            self.log_notification(customer, event_type, "Failed", str(e))
+            
+            frappe.log_error(
+                title='Error occurred in tier notification send.',
+                message=f"""
+                Method: send_tier_notification
+                Error: {e}
+                Customer: {customer.name}
+                Event Type: {event_type}
+                """,
+                reference_doctype="Notification Rule"
+            )
+            return False
+
+
     def load_rules(self):
         """Load all active notification rules"""
         self.rules = frappe.get_all(
@@ -76,63 +191,6 @@ class NotificationManager:
 
         return "Classic"
 
-    def send_notification(self, customer, event_type):
-        """Send notification based on event type"""
-        if not customer.mobile_no:
-            self.log_notification(customer, event_type, "Failed", "No mobile number")
-            return False
-
-        rule = self.get_rule(event_type)
-        if not rule:
-            self.log_notification(customer, event_type, "Failed", "No rule found")
-            return False
-
-        try:
-            # Create coupon
-            coupon = self.create_coupon(customer, rule)
-            
-            # Get customer's loyalty tier
-            loyalty_tier = self.get_customer_tier(customer)
-            
-            # Prepare message
-            message = rule.message_template.format(
-                customer_name=customer.customer_name,
-                coupon_code=coupon.coupon_name,
-                discount_value=coupon.discount_percentage or coupon.discount_amount,
-                validity_days=rule.validity_days,
-                loyalty_tier=loyalty_tier
-            )
-
-            # Send SMS
-            send_sms(
-                receiver_list=[customer.mobile_no],
-                msg=message
-                # sender_name=self.sms_settings.sms_sender_name
-            )
-
-            # Log success
-            self.log_notification(
-                customer, event_type, "Success",
-                f"Coupon: {coupon.name}",
-                coupon.name,
-                loyalty_tier
-            )
-            return True
-
-        except Exception as e:
-            self.log_notification(customer, event_type, "Failed", str(e))
-            
-            frappe.log_error(
-                title='Error occured in notification send.',
-                message=f"""
-                Method: {'send_notification' or 'Not Specified'}
-                Error: {e}
-                """,
-                reference_doctype="Notification Rule"
-            )
-
-            return False
-
     def get_rule(self, event_type):
         """Get rule for event type"""
         for rule in self.rules:
@@ -162,21 +220,21 @@ def process_daily_notifications():
     birthday_customers = frappe.get_all(
         "Customer",
         filters={
-            "birth_date": ["like", f"%-{today_date[5:]}"],
+            "custom_birthday": ["like", f"%-{today_date[5:]}"],
             "mobile_no": ["!=", ""]
         },
-        fields=["name", "customer_name", "mobile_no", "loyalty_program"]
+        fields=["name", "customer_name", "mobile_no", "loyalty_program", "loyalty_program_tier"]
     )
     
     for cust in birthday_customers:
         customer = frappe.get_doc("Customer", cust.name)
-        manager.send_notification(customer, "Birthday")
+        manager.send_tier_notification(customer, "Birthday")
 
     # Process membership anniversaries
     member_customers = frappe.get_all(
         "Customer",
         filters={
-            "creation": ["like", f"%-{today_date[5:]}"],
+            "custom_member_date": ["like", f"%-{today_date[5:]}"],
             "mobile_no": ["!=", ""],
             "loyalty_program": ["!=", ""]
         },
