@@ -14,9 +14,11 @@ doc_events = {
 
 # Scheduled Tasks
 scheduler_events = {
-    "daily": [
-        "notification_manager.notification_manager.utils.process_daily_notifications"
-    ]
+    "cron": {
+        "05 15 * * *": [
+            "notification_manager.notification_manager.utils.process_daily_notifications"
+        ]
+    }
 }
 
 # Apps

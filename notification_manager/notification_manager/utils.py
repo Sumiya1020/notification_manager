@@ -33,9 +33,8 @@ class NotificationManager:
             # Log success
             self.log_notification(
                 customer, event_type, "Success",
-                f"Coupon: ",
-                None,
-                loyalty_tier
+                message,
+                None
             )
             return True
 
