@@ -8,14 +8,12 @@
             "fieldname": "customer",
             "label": "Customer",
             "fieldtype": "Link",
-            "options": "Customer",
-            "reqd": 1
+            "options": "Customer"
         },
         {
             "fieldname": "event_type",
             "label": "Event Type",
-            "fieldtype": "Data",
-            "reqd": 1
+            "fieldtype": "Data"
         },
         {
             "fieldname": "loyalty_program",

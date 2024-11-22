@@ -68,7 +68,7 @@
         {
             "fieldname": "message_template",
             "label": "Message Template",
-            "fieldtype": "Text Editor",
+            "fieldtype": "Text",
             "reqd": 1,
             "description": "Variables: {customer_name}, {coupon_code}, {discount_value}, {validity_days}, {loyalty_tier}"
         }

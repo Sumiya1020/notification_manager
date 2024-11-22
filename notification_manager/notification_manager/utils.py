@@ -1,12 +1,31 @@
 import frappe
 from frappe import _
-from frappe.utils import today, add_days, getdate
+from frappe.utils import today, add_days
 from frappe.core.doctype.sms_settings.sms_settings import send_sms
 
 class NotificationManager:
     def __init__(self):
         self.sms_settings = frappe.get_doc("SMS Settings")
         self.load_rules()
+        
+    
+    def load_rules(self):
+        """Load all active notification rules"""
+        self.rules = frappe.get_all(
+            "Notification Rule",
+            filters={"enabled": 1},
+            fields=["*"]
+        )
+        
+        # Load child table data for each rule
+        for rule in self.rules:
+            rule.tier_discounts = frappe.get_all(
+                "Tier Discount",
+                filters={"parent": rule.name},
+                fields=["loyalty_program", "tier_name", "discount_value"],
+                order_by="idx"
+            )
+
 
     def send_notification(self, customer, event_type):
         """Send notification based on event type"""
@@ -80,13 +99,13 @@ class NotificationManager:
             
             # Prepare message by replacing placeholders
             message = rule.message_template.replace(
-                "{discount_value}", str(discount_value)
+                "discount_value", str(discount_value)
             ).replace(
-                "{customer_name}", customer.customer_name
+                "customer_name", customer.customer_name
             ).replace(
-                "{validity_days}", str(rule.validity_days)
+                "validity_days", str(rule.validity_days)
             ).replace(
-                "{loyalty_tier}", customer_tier or "Classic"
+                "loyalty_tier", customer_tier or "Classic"
             )
 
             # Send SMS
@@ -121,14 +140,6 @@ class NotificationManager:
             )
             return False
 
-
-    def load_rules(self):
-        """Load all active notification rules"""
-        self.rules = frappe.get_all(
-            "Notification Rule",
-            filters={"enabled": 1},
-            fields=["*"]
-        )
 
     def get_loyalty_tier_discount(self, customer, rule):
         customer_doc = frappe.get_doc("Customer", customer)
@@ -169,26 +180,26 @@ class NotificationManager:
         coupon.insert(ignore_permissions=True)
         return coupon
 
-    def get_customer_tier(self, customer):
-        """Get customer's current loyalty tier name"""
-        if not customer.loyalty_program:
-            return "Classic"
+    # def get_customer_tier(self, customer):
+    #     """Get customer's current loyalty tier name"""
+    #     if not customer.loyalty_program:
+    #         return "Classic"
 
-        loyalty_program = frappe.get_doc("Loyalty Program", customer.loyalty_program)
-        points = frappe.db.sql("""
-            SELECT sum(loyalty_points) as points
-            FROM `tabLoyalty Point Entry`
-            WHERE customer = %s AND loyalty_program = %s
-            AND expiry_date >= %s
-        """, (customer.name, loyalty_program.name, today()), as_dict=1)
+    #     loyalty_program = frappe.get_doc("Loyalty Program", customer.loyalty_program)
+    #     points = frappe.db.sql("""
+    #         SELECT sum(loyalty_points) as points
+    #         FROM `tabLoyalty Point Entry`
+    #         WHERE customer = %s AND loyalty_program = %s
+    #         AND expiry_date >= %s
+    #     """, (customer.name, loyalty_program.name, today()), as_dict=1)
         
-        current_points = points[0].points if points and points[0].points else 0
+    #     current_points = points[0].points if points and points[0].points else 0
 
-        for tier in loyalty_program.collection_rules:
-            if current_points >= tier.min_spent:
-                return tier.name
+    #     for tier in loyalty_program.collection_rules:
+    #         if current_points >= tier.min_spent:
+    #             return tier.name
 
-        return "Classic"
+    #     return "Classic"
 
     def get_rule(self, event_type):
         """Get rule for event type"""
@@ -214,31 +225,26 @@ def process_daily_notifications():
     """Process all daily notifications"""
     manager = NotificationManager()
     today_date = today()
+    month_day = today_date[5:]  # Get MM-DD
 
-    # Process birthdays
-    birthday_customers = frappe.get_all(
-        "Customer",
-        filters={
-            "custom_birthday": ["like", f"%-{today_date[5:]}"],
-            "mobile_no": ["!=", ""]
-        },
-        fields=["name", "customer_name", "mobile_no", "loyalty_program", "loyalty_program_tier"]
-    )
+    birthday_customers = frappe.db.sql("""
+        SELECT name, customer_name, mobile_no, loyalty_program, loyalty_program_tier 
+        FROM `tabCustomer` 
+        WHERE DATE_FORMAT(custom_birthday, '%%m-%%d') = %s 
+        AND mobile_no != ''
+    """, month_day, as_dict=1)
     
     for cust in birthday_customers:
         customer = frappe.get_doc("Customer", cust.name)
         manager.send_tier_notification(customer, "Birthday")
 
     # Process membership anniversaries
-    member_customers = frappe.get_all(
-        "Customer",
-        filters={
-            "custom_member_date": ["like", f"%-{today_date[5:]}"],
-            "mobile_no": ["!=", ""],
-            "loyalty_program": ["!=", ""]
-        },
-        fields=["name", "customer_name", "mobile_no", "loyalty_program"]
-    )
+    member_customers = frappe.db.sql("""
+        SELECT name, customer_name, mobile_no, loyalty_program, loyalty_program_tier 
+        FROM `tabCustomer` 
+        WHERE DATE_FORMAT(custom_member_date, '%%m-%%d') = %s 
+        AND mobile_no != ''
+    """, month_day, as_dict=1)
     
     for cust in member_customers:
         customer = frappe.get_doc("Customer", cust.name)
