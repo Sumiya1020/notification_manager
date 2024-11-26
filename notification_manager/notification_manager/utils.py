@@ -224,6 +224,8 @@ class NotificationManager:
 def process_daily_notifications():
     """Process all daily notifications"""
     manager = NotificationManager()
+    
+    # Process birthday notifs
     today_date = today()
     month_day = today_date[5:]  # Get MM-DD
 
@@ -249,6 +251,44 @@ def process_daily_notifications():
     for cust in member_customers:
         customer = frappe.get_doc("Customer", cust.name)
         manager.send_notification(customer, "Membership Anniversary")
+        
+    # Process loyalty tier change
+    yesterday = add_days(today(), -1)
+    day_before_yesterday = add_days(today(), -2)
+    purchased_customers = frappe.db.sql("""
+        select customer from `tabLoyalty Point Entry`
+        where posting_date = %s
+        group by customer
+    """, yesterday, as_dict=1)
+    loyalty_program = frappe.get_doc("Loyalty Program", loyalty_program)
+    tier_spent_level = sorted(
+        [d.as_dict() for d in loyalty_program.collection_rules],
+        key=lambda rule: rule.min_spent,
+        reverse=True,
+    )
+    
+    for cust in purchased_customers:
+        customer = frappe.get_doc("Customer", cust.customer)
+        tier_purchase_before = frappe.db.sql("""
+            SELECT sum(loyalty_points) AS loyalty_points,
+                sum(purchase_amount) AS total_spent
+            FROM `tabLoyalty Point Entry`
+            WHERE customer=cust.customer
+                AND posting_date <= day_before_yesterday
+                AND expiry_date>= day_before_yesterday
+                AND loyalty_points > 0
+            GROUP BY customer
+        """, month_day, as_dict=1)
+        tier_before = 'Classic'
+        for i, d in enumerate(tier_spent_level):
+            if i == 0 or (tier_purchase_before.total_spent) <= d.min_spent:
+                tier_before = d.tier_name
+            else:
+                break
+        if customer.loyalty_program_tier != tier_before:
+            #send notif
+            pass
+    
 
 def on_customer_create(doc, method):
     """Handle new customer registration"""

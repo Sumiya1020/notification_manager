@@ -21,7 +21,7 @@
             "fieldname": "event_type",
             "label": "Event Type",
             "fieldtype": "Select",
-            "options": "New Registration\nBirthday\nMembership Anniversary",
+            "options": "New Registration\nBirthday\nMembership Anniversary\nLoyalty Upgrade",
             "reqd": 1
         },
         {
