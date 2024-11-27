@@ -109,10 +109,10 @@ class NotificationManager:
             )
 
             # Send SMS
-            send_sms(
-                receiver_list=[customer.mobile_no],
-                msg=message
-            )
+            # send_sms(
+            #     receiver_list=[customer.mobile_no],
+            #     msg=message
+            # )
 
             # Log success
             self.log_notification(
@@ -180,27 +180,6 @@ class NotificationManager:
         coupon.insert(ignore_permissions=True)
         return coupon
 
-    # def get_customer_tier(self, customer):
-    #     """Get customer's current loyalty tier name"""
-    #     if not customer.loyalty_program:
-    #         return "Classic"
-
-    #     loyalty_program = frappe.get_doc("Loyalty Program", customer.loyalty_program)
-    #     points = frappe.db.sql("""
-    #         SELECT sum(loyalty_points) as points
-    #         FROM `tabLoyalty Point Entry`
-    #         WHERE customer = %s AND loyalty_program = %s
-    #         AND expiry_date >= %s
-    #     """, (customer.name, loyalty_program.name, today()), as_dict=1)
-        
-    #     current_points = points[0].points if points and points[0].points else 0
-
-    #     for tier in loyalty_program.collection_rules:
-    #         if current_points >= tier.min_spent:
-    #             return tier.name
-
-    #     return "Classic"
-
     def get_rule(self, event_type):
         """Get rule for event type"""
         for rule in self.rules:
@@ -225,6 +204,7 @@ def process_daily_notifications():
     """Process all daily notifications"""
     manager = NotificationManager()
     
+    
     # Process birthday notifs
     today_date = today()
     month_day = today_date[5:]  # Get MM-DD
@@ -240,6 +220,7 @@ def process_daily_notifications():
         customer = frappe.get_doc("Customer", cust.name)
         manager.send_tier_notification(customer, "Birthday")
 
+    
     # Process membership anniversaries
     member_customers = frappe.db.sql("""
         SELECT name, customer_name, mobile_no, loyalty_program, loyalty_program_tier 
@@ -252,42 +233,92 @@ def process_daily_notifications():
         customer = frappe.get_doc("Customer", cust.name)
         manager.send_notification(customer, "Membership Anniversary")
         
-    # Process loyalty tier change
+    
+    # """Process loyalty tier changes based on yesterday's purchases"""
     yesterday = add_days(today(), -1)
     day_before_yesterday = add_days(today(), -2)
-    purchased_customers = frappe.db.sql("""
-        select customer from `tabLoyalty Point Entry`
-        where posting_date = %s
-        group by customer
-    """, yesterday, as_dict=1)
-    loyalty_program = frappe.get_doc("Loyalty Program", loyalty_program)
-    tier_spent_level = sorted(
-        [d.as_dict() for d in loyalty_program.collection_rules],
-        key=lambda rule: rule.min_spent,
-        reverse=True,
-    )
-    
-    for cust in purchased_customers:
-        customer = frappe.get_doc("Customer", cust.customer)
-        tier_purchase_before = frappe.db.sql("""
-            SELECT sum(loyalty_points) AS loyalty_points,
-                sum(purchase_amount) AS total_spent
+
+    # Get customers who made purchases yesterday
+    tier_changes = frappe.db.sql("""
+        WITH CurrentTotals AS (
+            SELECT 
+                customer,
+                loyalty_program,
+                SUM(purchase_amount) as current_total
             FROM `tabLoyalty Point Entry`
-            WHERE customer=cust.customer
-                AND posting_date <= day_before_yesterday
-                AND expiry_date>= day_before_yesterday
+            WHERE posting_date <= %s
+                AND expiry_date >= %s
                 AND loyalty_points > 0
-            GROUP BY customer
-        """, month_day, as_dict=1)
-        tier_before = 'Classic'
-        for i, d in enumerate(tier_spent_level):
-            if i == 0 or (tier_purchase_before.total_spent) <= d.min_spent:
-                tier_before = d.tier_name
-            else:
-                break
-        if customer.loyalty_program_tier != tier_before:
-            #send notif
-            pass
+            GROUP BY customer, loyalty_program
+        ),
+        PreviousTotals AS (
+            SELECT 
+                customer,
+                loyalty_program,
+                SUM(purchase_amount) as previous_total
+            FROM `tabLoyalty Point Entry`
+            WHERE posting_date <= %s
+                AND expiry_date >= %s
+                AND loyalty_points > 0
+            GROUP BY customer, loyalty_program
+        )
+        SELECT 
+            c.customer,
+            c.loyalty_program,
+            COALESCE(p.previous_total, 0) as previous_total,
+            COALESCE(c.current_total, 0) as current_total,
+            cust.loyalty_program_tier as current_tier
+        FROM CurrentTotals c
+        LEFT JOIN PreviousTotals p 
+            ON c.customer = p.customer 
+            AND c.loyalty_program = p.loyalty_program
+        INNER JOIN `tabCustomer` cust 
+            ON c.customer = cust.name
+        WHERE EXISTS (
+            SELECT 1 
+            FROM `tabLoyalty Point Entry` lpe
+            WHERE lpe.customer = c.customer
+                AND lpe.posting_date = %s
+        )
+    """, (yesterday, yesterday, day_before_yesterday, day_before_yesterday, yesterday), as_dict=1)
+    
+    loyalty_program = frappe.get_doc("Loyalty Program", change.loyalty_program)
+
+    for change in tier_changes:
+        customer = frappe.get_doc("Customer", change.customer)
+        
+        # Get tier levels sorted by min_spent
+        tier_levels = sorted(
+            [d.as_dict() for d in loyalty_program.collection_rules],
+            key=lambda rule: rule.min_spent,
+            reverse=True
+        )
+
+        # Determine previous and new tiers
+        def get_tier(total_spent):
+            for tier in tier_levels:
+                if total_spent <= tier.min_spent:
+                    return tier.tier_name
+            return "Classic"
+
+        previous_tier = get_tier(change.previous_total)
+        new_tier = get_tier(change.current_total)
+
+        # If tier has changed, send notification
+        if new_tier != previous_tier:
+            customer.loyalty_program_tier = new_tier
+            manager.send_tier_notification(customer, "Loyalty Upgrade")
+            
+            # Log the change
+            frappe.get_doc({
+                "doctype": "Notification Log",
+                "customer": customer.name,
+                "event_type": "Tier_Change",
+                "status": "Success",
+                "message": f"Tier changed from {previous_tier} to {new_tier}",
+                "loyalty_program": customer.loyalty_program,
+                "loyalty_tier": new_tier
+            }).insert(ignore_permissions=True)
     
 
 def on_customer_create(doc, method):
