@@ -46,7 +46,6 @@ class NotificationManager:
             send_sms(
                 receiver_list=[customer.mobile_no],
                 msg=message
-                # sender_name=self.sms_settings.sms_sender_name
             )
 
             # Log success
@@ -109,10 +108,10 @@ class NotificationManager:
             )
 
             # Send SMS
-            # send_sms(
-            #     receiver_list=[customer.mobile_no],
-            #     msg=message
-            # )
+            send_sms(
+                receiver_list=[customer.mobile_no],
+                msg=message
+            )
 
             # Log success
             self.log_notification(
@@ -282,7 +281,8 @@ def process_daily_notifications():
         )
     """, (yesterday, yesterday, day_before_yesterday, day_before_yesterday, yesterday), as_dict=1)
     
-    loyalty_program = frappe.get_doc("Loyalty Program", change.loyalty_program)
+    loyalty_program = frappe.get_doc("Loyalty Program", "LAC CLUB")
+    tier_changed = False
 
     for change in tier_changes:
         customer = frappe.get_doc("Customer", change.customer)
@@ -306,19 +306,21 @@ def process_daily_notifications():
 
         # If tier has changed, send notification
         if new_tier != previous_tier:
+            tier_changed = True
             customer.loyalty_program_tier = new_tier
             manager.send_tier_notification(customer, "Loyalty Upgrade")
             
             # Log the change
-            frappe.get_doc({
-                "doctype": "Notification Log",
-                "customer": customer.name,
-                "event_type": "Tier_Change",
-                "status": "Success",
-                "message": f"Tier changed from {previous_tier} to {new_tier}",
-                "loyalty_program": customer.loyalty_program,
-                "loyalty_tier": new_tier
-            }).insert(ignore_permissions=True)
+            manager.log_notification(customer, "Tier_Change", "Success", f"Tier changed from {previous_tier} to {new_tier}", new_tier)
+    
+    if not tier_changed:
+        frappe.get_doc({
+            "doctype": "Notification Log",
+            "customer": "",
+            "event_type": "Loyalty Upgrade",
+            "status": "Success",
+            "message": f"No tier changed on {yesterday}"
+        }).insert(ignore_permissions=True)
     
 
 def on_customer_create(doc, method):
