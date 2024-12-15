@@ -2,6 +2,8 @@ import frappe
 from frappe import _
 from frappe.utils import today, add_days
 from frappe.core.doctype.sms_settings.sms_settings import send_sms
+import random
+import string
 
 class NotificationManager:
     def __init__(self):
@@ -95,6 +97,44 @@ class NotificationManager:
             
             # Use default discount value if no tier-specific discount found
             discount_value = tier_discount.discount_value if tier_discount else rule.discount_value
+            pricing_rule_title = event_type + "_" + customer_tier
+            
+            # Check if PricingRule exists update discount_value as notification rule
+            pricing_rule_name = frappe.db.exists("Pricing Rule", {"title": pricing_rule_title})
+            
+            fields = {
+                "title": pricing_rule_title,
+                "apply_on": "Transaction",
+                "price_or_product_discount": "Price",
+                "coupon_code_based": 1,
+                "selling": 1,
+                "buying": 0,
+                "valid_from": "2024-12-15",
+                "company": "LAC",
+                "currency": "MNT",
+                "rate_or_discount": "Discount Amount",
+                "apply_discount_on": "Grand Total",
+                "discount_amount": discount_value or 0.0,  # taken from notification rule
+                "disable": 0
+            }
+            
+            pr_doc = None
+            if pricing_rule_name:
+                # Update existing pricing rule
+                pr_doc = frappe.get_doc("Pricing Rule", pricing_rule_name)
+                for key, val in fields.items():
+                    pr_doc.set(key, val)
+                pr_doc.save()
+            # If not exists then create PricingRule
+            else:
+                pr_doc = frappe.get_doc({
+                    "doctype": "Pricing Rule",
+                    **fields
+                })
+                pr_doc.insert(ignore_permissions=True)
+            
+            # Create Coupon
+            coupon_doc = self.create_coupon(customer, rule, pr_doc.name)
             
             # Prepare message by replacing placeholders
             message = rule.message_template.replace(
@@ -105,6 +145,8 @@ class NotificationManager:
                 "validity_days", str(rule.validity_days)
             ).replace(
                 "loyalty_tier", customer_tier or "Classic"
+            ).replace(
+                "coupon_code", coupon_doc.coupon_code
             )
 
             # Send SMS
@@ -160,21 +202,19 @@ class NotificationManager:
                     
         return tier_discounts.get(current_tier)
 
-    def create_coupon(self, customer, rule):
+    def create_coupon(self, customer, notif_rule, pricing_rule_name):
         """Create coupon based on notification rule"""
-        discount_value = 0
+        coupon_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
         
         coupon = frappe.get_doc({
             "doctype": "Coupon Code",
-            "coupon_name": f"{rule.event_type[:3].upper()}{customer.name[:5]}{today().replace('-', '')}",
+            "coupon_name": coupon_code,
+            "coupon_code": coupon_code,
             "coupon_type": "Gift Card",
-            "discount_percentage": discount_value if rule.discount_type == "Percentage" else 0,
-            "discount_amount": discount_value if rule.discount_type == "Amount" else 0,
-            "valid_from": today(),
-            "valid_upto": add_days(today(), rule.validity_days),
+            "pricing_rule": pricing_rule_name,
             "customer": customer.name,
-            "maximum_use": 1,
-            "pricing_rule": "PRLE-0005"
+            "valid_from": today(),
+            "valid_upto": add_days(today(), notif_rule.validity_days)
         })
         coupon.insert(ignore_permissions=True)
         return coupon
