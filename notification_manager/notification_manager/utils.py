@@ -266,6 +266,7 @@ def process_daily_notifications():
         FROM `tabCustomer` 
         WHERE DATE_FORMAT(custom_member_date, '%%m-%%d') = %s 
         AND mobile_no != ''
+        and EXTRACT(YEAR FROM custom_member_date) != EXTRACT(YEAR FROM CURRENT_DATE)
     """, month_day, as_dict=1)
     
     for cust in member_customers:
