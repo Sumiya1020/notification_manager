@@ -34,6 +34,7 @@ class DatabaseConnection:
     def connect(self):
         try:
             if not self.connection or not self.connection.is_connected():
+                logger.debug(f"Connecting to DB with config: {self.config}")
                 self.connection = mysql.connector.connect(**self.config)
                 logger.info("Database connection established successfully")
         except Error as e:
@@ -46,36 +47,38 @@ class DatabaseConnection:
             logger.info("Database connection closed")
 
     def execute_query(self, query: str, params: tuple = None) -> List[Dict]:
+        logger.debug(f"Executing query: {query}")
+        logger.debug(f"Parameters: {params}")
         try:
-            self.connect()
             cursor = self.connection.cursor(dictionary=True)
             cursor.execute(query, params)
             result = cursor.fetchall()
             cursor.close()
+            logger.debug(f"Query returned {len(result)} rows.")
             return result
         except Error as e:
             logger.error(f"Error executing query: {e}")
             logger.error(f"Query: {query}")
             logger.error(f"Parameters: {params}")
             raise
-        finally:
-            self.disconnect()
 
     def execute_update(self, query: str, params: tuple = None) -> None:
+        logger.debug(f"Executing update: {query}")
+        logger.debug(f"Parameters: {params}")
         try:
             self.connect()
             cursor = self.connection.cursor()
             cursor.execute(query, params)
             self.connection.commit()
             cursor.close()
+            logger.info("Update committed successfully.")
         except Error as e:
             logger.error(f"Error executing update: {e}")
             logger.error(f"Query: {query}")
             logger.error(f"Parameters: {params}")
             self.connection.rollback()
+            logger.warning("Update rolled back due to error.")
             raise
-        finally:
-            self.disconnect()
 
 class LoyaltyTierProcessor:
     def __init__(self):
@@ -83,11 +86,12 @@ class LoyaltyTierProcessor:
         
     def get_tier_changes(self, yesterday: str, day_before_yesterday: str) -> List[CustomerTierData]:
         """
-        Get customers with potential tier changes using a single optimized query
+        Get customers with potential tier changes using a single optimized query.
+        We pass in specific dates (yesterday and day_before_yesterday).
         """
         query = """
         WITH CurrentTotals AS (
-            -- Calculate totals including yesterday's purchases
+            -- Calculate totals including 'yesterday's' purchases
             SELECT 
                 customer,
                 loyalty_program,
@@ -99,7 +103,7 @@ class LoyaltyTierProcessor:
             GROUP BY customer, loyalty_program
         ),
         PreviousTotals AS (
-            -- Calculate totals up to day before yesterday
+            -- Calculate totals up to 'day_before_yesterday'
             SELECT 
                 customer,
                 loyalty_program,
@@ -133,11 +137,14 @@ class LoyaltyTierProcessor:
         try:
             results = self.db.execute_query(
                 query, 
-                (yesterday, yesterday, 
-                 day_before_yesterday, day_before_yesterday,
-                 yesterday)
+                (
+                    yesterday, yesterday, 
+                    day_before_yesterday, day_before_yesterday,
+                    yesterday
+                )
             )
             
+            logger.debug(f"get_tier_changes returned {len(results)} potential changes.")
             return [
                 CustomerTierData(
                     customer=row['customer'],
@@ -153,19 +160,22 @@ class LoyaltyTierProcessor:
             raise
 
     def get_loyalty_program_tiers(self, loyalty_program: str) -> List[Dict]:
-        """Get tier rules for a loyalty program"""
+        """Get tier rules for a loyalty program."""
+        logger.debug(f"Fetching loyalty program tiers for {loyalty_program}")
         query = """
         SELECT tier_name, min_spent
         FROM `tabLoyalty Program Collection`
         WHERE parent = %s
-        ORDER BY min_spent DESC
+        ORDER BY min_spent ASC
         """
-        return self.db.execute_query(query, (loyalty_program,))
+        tiers = self.db.execute_query(query, (loyalty_program,))
+        logger.debug(f"Found {len(tiers)} tier(s) for loyalty program {loyalty_program}")
+        return tiers
 
     def determine_tier(self, total_spent: Decimal, tiers: List[Dict]) -> str:
-        """Determine tier based on total spent"""
+        """Determine tier based on total spent."""
         for tier in tiers:
-            if total_spent >= Decimal(str(tier['min_spent'])):
+            if total_spent <= Decimal(str(tier['min_spent'])):
                 return tier['tier_name']
         return "Classic"
 
@@ -179,7 +189,8 @@ class LoyaltyTierProcessor:
     #     self.db.execute_update(query, (new_tier, customer))
 
     def send_tier_change_notification(self, customer: str, new_tier: str) -> None:
-        """Send notification for tier change"""
+        """Send notification for tier change."""
+        logger.info(f"Sending tier change notification to {customer} for new tier: {new_tier}")
         query = """
         INSERT INTO `tabNotification Log`
         (customer, event_type, status, message, loyalty_tier)
@@ -191,16 +202,14 @@ class LoyaltyTierProcessor:
         #     (customer, "Tier_Change", "Success", message, new_tier)
         # )
 
-    def process_loyalty_tier_changes(self):
-        """Main function to process tier changes"""
+    def process_loyalty_tier_changes(self, yesterday: str, day_before_yesterday: str):
+        """
+        Main function to process tier changes for specific 'yesterday' and 'day_before_yesterday' dates.
+        """
         try:
-            # yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-            # day_before_yesterday = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')
-            yesterday = (datetime.now()).strftime('%Y-%m-%d')
-            day_before_yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-            
-            logger.info("Starting loyalty tier change processing")
-            
+            logger.info(f"Processing loyalty tier changes for {yesterday} (yesterday) "
+                        f"and {day_before_yesterday} (day_before_yesterday).")
+
             # Get all potential tier changes
             customers_data = self.get_tier_changes(yesterday, day_before_yesterday)
             
@@ -216,35 +225,51 @@ class LoyaltyTierProcessor:
                     # If tier has changed, update and notify
                     if new_tier != previous_tier:
                         logger.info(
-                            f"Tier change for {customer_data.customer}: "
+                            f"Tier change detected for customer '{customer_data.customer}': "
                             f"{previous_tier} -> {new_tier}"
                         )
                         logger.info(
-                            f"Previous total: {customer_data.previous_total}, "
-                            f"Current total: {customer_data.current_total}"
+                            f"Previous total: {customer_data.previous_total:.2f}, "
+                            f"Current total: {customer_data.current_total:.2f}"
                         )
                         
                         # self.update_customer_tier(customer_data.customer, new_tier)
-                        self.send_tier_change_notification(customer_data.customer, new_tier)
+                        # self.send_tier_change_notification(customer_data.customer, new_tier)
                         
                 except Exception as e:
-                    logger.error(
-                        f"Error processing customer {customer_data.customer}: {e}"
-                    )
+                    logger.error(f"Error processing customer {customer_data.customer}: {e}")
                     continue
-                    
-            logger.info("Completed loyalty tier change processing")
             
         except Exception as e:
             logger.error(f"Error in process_loyalty_tier_changes: {e}")
             raise
 
 def main():
-    processor = LoyaltyTierProcessor()
+    """
+    Main script entry point: 
+    Loops through dates in December (e.g., Dec 2..30) and 
+    calls process_loyalty_tier_changes for each pair of 
+    (yesterday=Dec N, day_before_yesterday=Dec N-1).
+    """
     try:
-        processor.process_loyalty_tier_changes()
+        processor = LoyaltyTierProcessor()
+
+        # Example: Loop from December 2 to December 30 (2024),
+        # so day_before_yesterday goes from Dec 1 to Dec 29
+        year = 2024
+        month = 12
+        
+        processor.db.connect()
+        for day in range(2, 31):  # 2..30
+            yesterday_str = f"{year}-{month:02d}-{day:02d}"
+            day_before_yesterday_str = f"{year}-{month:02d}-{(day-1):02d}"
+            
+            processor.process_loyalty_tier_changes(yesterday_str, day_before_yesterday_str)
+            
     except Exception as e:
-        logger.error(f"Failed to process loyalty tier changes: {e}")
+        logger.error(f"Failed to process loyalty tier changes for {yesterday_str}: {e}")
+    finally:
+        processor.db.disconnect()
 
 if __name__ == "__main__":
     main()
