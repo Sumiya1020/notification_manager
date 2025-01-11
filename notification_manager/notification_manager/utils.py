@@ -331,8 +331,7 @@ def process_daily_notifications():
         # Get tier levels sorted by min_spent
         tier_levels = sorted(
             [d.as_dict() for d in loyalty_program.collection_rules],
-            key=lambda rule: rule.min_spent,
-            reverse=True
+            key=lambda rule: rule.min_spent
         )
 
         # Determine previous and new tiers
