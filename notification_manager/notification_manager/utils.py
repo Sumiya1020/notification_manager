@@ -351,7 +351,7 @@ def process_daily_notifications():
             manager.send_tier_notification(customer, "Loyalty Upgrade")
             
             # Log the change
-            manager.log_notification(customer, "Tier_Change", "Success", f"Tier changed from {previous_tier} to {new_tier}", new_tier)
+            manager.log_notification(customer, "Tier_Change", "Success", f"Tier changed from {previous_tier} to {new_tier}")
     
     if not tier_changed:
         frappe.get_doc({
