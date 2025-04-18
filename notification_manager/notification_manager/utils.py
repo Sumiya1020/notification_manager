@@ -88,6 +88,10 @@ class NotificationManager:
             # Get customer's current tier
             customer_tier = customer.loyalty_program_tier
             
+            # If tier is classic 1 then make it classic
+            if customer_tier == 'Classic 1' or customer_tier == 'Classic 2':
+                customer_tier = 'Classic'
+            
             # Find matching tier discount
             tier_discount = None
             for td in rule.tier_discounts:
@@ -266,6 +270,7 @@ def process_daily_notifications():
         FROM `tabCustomer` 
         WHERE DATE_FORMAT(custom_member_date, '%%m-%%d') = %s 
         AND mobile_no != ''
+        and EXTRACT(YEAR FROM custom_member_date) != EXTRACT(YEAR FROM CURRENT_DATE)
     """, month_day, as_dict=1)
     
     for cust in member_customers:
@@ -330,8 +335,7 @@ def process_daily_notifications():
         # Get tier levels sorted by min_spent
         tier_levels = sorted(
             [d.as_dict() for d in loyalty_program.collection_rules],
-            key=lambda rule: rule.min_spent,
-            reverse=True
+            key=lambda rule: rule.min_spent
         )
 
         # Determine previous and new tiers
@@ -343,6 +347,10 @@ def process_daily_notifications():
 
         previous_tier = get_tier(change.previous_total)
         new_tier = get_tier(change.current_total)
+        
+        # If tier is classic then continue
+        if new_tier in ('Classic 1', 'Classic 2'):
+            continue
 
         # If tier has changed, send notification
         if new_tier != previous_tier:
@@ -351,7 +359,7 @@ def process_daily_notifications():
             manager.send_tier_notification(customer, "Loyalty Upgrade")
             
             # Log the change
-            manager.log_notification(customer, "Tier_Change", "Success", f"Tier changed from {previous_tier} to {new_tier}", new_tier)
+            manager.log_notification(customer, "Tier_Change", "Success", f"Tier changed from {previous_tier} to {new_tier}")
     
     if not tier_changed:
         frappe.get_doc({
