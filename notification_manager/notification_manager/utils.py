@@ -89,7 +89,7 @@ class NotificationManager:
             customer_tier = customer.loyalty_program_tier
             
             # If tier is classic 1 then make it classic
-            if customer_tier == 'Classic 1':
+            if customer_tier == 'Classic 1' or customer_tier == 'Classic 2':
                 customer_tier = 'Classic'
             
             # Find matching tier discount
