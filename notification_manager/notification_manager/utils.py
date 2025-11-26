@@ -88,6 +88,10 @@ class NotificationManager:
             # Get customer's current tier
             customer_tier = customer.loyalty_program_tier
             
+            # If tier is classic 1 then make it classic
+            if customer_tier == 'Classic 1':
+                customer_tier = 'Classic'
+            
             # Find matching tier discount
             tier_discount = None
             for td in rule.tier_discounts:
@@ -343,6 +347,10 @@ def process_daily_notifications():
 
         previous_tier = get_tier(change.previous_total)
         new_tier = get_tier(change.current_total)
+        
+        # If tier is classic then continue
+        if new_tier in ('Classic 1', 'Classic 2'):
+            continue
 
         # If tier has changed, send notification
         if new_tier != previous_tier:

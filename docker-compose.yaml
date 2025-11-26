@@ -1,0 +1,239 @@
+name: lac_erpnext_prod
+services:
+  backend:
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+        required: true
+    image: frappe/erpnext:v15.42.0
+    networks:
+      default: null
+    platform: linux/amd64
+    pull_policy: always
+    volumes:
+      - type: volume
+        source: sites
+        target: /home/frappe/frappe-bench/sites
+        volume: {}
+      - type: volume
+        source: apps
+        target: /home/frappe/frappe-bench/apps
+        volume: {}
+  configurator:
+    command:
+      - |
+        ls -1 apps > sites/apps.txt; bench set-config -g db_host $$DB_HOST; bench set-config -gp db_port $$DB_PORT; bench set-config -g redis_cache "redis://$$REDIS_CACHE"; bench set-config -g redis_queue "redis://$$REDIS_QUEUE"; bench set-config -g redis_socketio "redis://$$REDIS_QUEUE"; bench set-config -gp socketio_port $$SOCKETIO_PORT;
+    depends_on:
+      redis-cache:
+        condition: service_started
+        required: true
+      redis-queue:
+        condition: service_started
+        required: true
+    entrypoint:
+      - bash
+      - -c
+    environment:
+      DB_HOST: database-3.cj20go4siene.ap-southeast-1.rds.amazonaws.com
+      DB_PORT: "3306"
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+      SOCKETIO_PORT: "9000"
+    image: frappe/erpnext:v15.42.0
+    networks:
+      default: null
+    platform: linux/amd64
+    pull_policy: always
+    volumes:
+      - type: volume
+        source: sites
+        target: /home/frappe/frappe-bench/sites
+        volume: {}
+  frontend:
+    command:
+      - nginx-entrypoint.sh
+    depends_on:
+      backend:
+        condition: service_started
+        required: true
+      websocket:
+        condition: service_started
+        required: true
+    environment:
+      BACKEND: backend:8000
+      CLIENT_MAX_BODY_SIZE: 50m
+      FRAPPE_SITE_NAME_HEADER: $$host
+      PROXY_READ_TIMEOUT: "120"
+      SOCKETIO: websocket:9000
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+    image: frappe/erpnext:v15.42.0
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frontend-http.entrypoints: web
+      traefik.http.routers.frontend-http.rule: HostRegexp(`{any:.+}`)
+      traefik.http.services.frontend.loadbalancer.server.port: "8080"
+    networks:
+      default: null
+    platform: linux/amd64
+    pull_policy: always
+    volumes:
+      - type: volume
+        source: sites
+        target: /home/frappe/frappe-bench/sites
+        volume: {}
+  proxy:
+    command:
+      - --providers.docker
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    image: traefik:v2.11
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "80"
+        protocol: tcp
+    userns_mode: host
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+        bind:
+          create_host_path: true
+  queue-long:
+    command:
+      - bench
+      - worker
+      - --queue
+      - long,default,short
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+        required: true
+    image: frappe/erpnext:v15.42.0
+    networks:
+      default: null
+    platform: linux/amd64
+    pull_policy: always
+    volumes:
+      - type: volume
+        source: sites
+        target: /home/frappe/frappe-bench/sites
+        volume: {}
+      - type: volume
+        source: apps
+        target: /home/frappe/frappe-bench/apps
+        volume: {}
+  queue-short:
+    command:
+      - bench
+      - worker
+      - --queue
+      - short,default
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+        required: true
+    image: frappe/erpnext:v15.42.0
+    networks:
+      default: null
+    platform: linux/amd64
+    pull_policy: always
+    volumes:
+      - type: volume
+        source: sites
+        target: /home/frappe/frappe-bench/sites
+        volume: {}
+      - type: volume
+        source: apps
+        target: /home/frappe/frappe-bench/apps
+        volume: {}
+  redis-cache:
+    image: redis:6.2-alpine
+    networks:
+      default: null
+    volumes:
+      - type: volume
+        source: redis-cache-data
+        target: /data
+        volume: {}
+  redis-queue:
+    image: redis:6.2-alpine
+    networks:
+      default: null
+    volumes:
+      - type: volume
+        source: redis-queue-data
+        target: /data
+        volume: {}
+  scheduler:
+    command:
+      - bench
+      - schedule
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+        required: true
+    image: frappe/erpnext:v15.42.0
+    networks:
+      default: null
+    platform: linux/amd64
+    pull_policy: always
+    volumes:
+      - type: volume
+        source: sites
+        target: /home/frappe/frappe-bench/sites
+        volume: {}
+      - type: volume
+        source: apps
+        target: /home/frappe/frappe-bench/apps
+        volume: {}
+  websocket:
+    command:
+      - node
+      - /home/frappe/frappe-bench/apps/frappe/socketio.js
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+        required: true
+    image: frappe/erpnext:v15.42.0
+    networks:
+      default: null
+    platform: linux/amd64
+    pull_policy: always
+    volumes:
+      - type: volume
+        source: sites
+        target: /home/frappe/frappe-bench/sites
+        volume: {}
+networks:
+  default:
+    name: lac_erpnext_prod_default
+volumes:
+  redis-cache-data:
+    name: lac_erpnext_prod_redis-cache-data
+  redis-queue-data:
+    name: lac_erpnext_prod_redis-queue-data
+  sites:
+    name: lac_erpnext_prod_sites
+  apps:
+    name: lac_erpnext_prod_apps
+x-backend-defaults:
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+  image: frappe/erpnext:v15.42.0
+  pull_policy: always
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+x-customizable-image:
+  image: frappe/erpnext:v15.42.0
+  pull_policy: always
+x-depends-on-configurator:
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
