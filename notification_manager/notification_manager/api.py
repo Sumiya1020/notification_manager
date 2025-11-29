@@ -51,6 +51,13 @@ def generate_passkit_jwt():
     return jwt
 
 
+def create_passkit_member_doc(member_data):
+    doc = frappe.get_doc(member_data)
+    
+    doc.insert(ignore_permissions=True)   # use ignore_permissions only if needed
+    frappe.db.commit()
+
+
 def enroll_passkit_member_api(customer, jwt_token):
     """
     Enroll a new PassKit member using ERPNext Customer data.
@@ -93,6 +100,13 @@ def enroll_passkit_member_api(customer, jwt_token):
         body = None
 
     if response.status_code in [200, 201]:
+        create_passkit_member_doc({
+            "doctype": "Passkit Member",   # your custom Doctype name
+            "passkit_id": body['id'],
+            "customer_name": customer.name,
+            "passkit_status": "ENROLLED"
+        })
+        
         return {
             "status": "created",
             "url": f'https://pub2.pskt.io/{body['id']}'
@@ -114,7 +128,8 @@ def delete_passkit_member_api(customer, jwt_token):
     url = "https://api.pub2.passkit.io/members/member"
 
     payload = {
-        "externalId": customer.name
+        "externalId": customer.name,
+        "programId": PASSKIT_PROGRAM_ID,
     }
 
     headers = {
@@ -123,6 +138,11 @@ def delete_passkit_member_api(customer, jwt_token):
     }
 
     response = requests.delete(url, headers=headers, json=payload)
+    
+    exists = frappe.db.exists("Passkit Member", {"customer_name": customer.name})
+    if exists:
+        frappe.delete_doc("Passkit Member", exists)
+        frappe.db.commit()
 
     try:
         body = response.json()
@@ -234,6 +254,15 @@ def get_or_create_passkit_member(customer_id):
     # 4️⃣ If found member → return it
     # -------------------------
     if response.status_code == 200 and body and len(body) > 0:
+        exists = frappe.db.exists("Passkit Member", {"customer_name": customer.name})
+        if not exists:
+            create_passkit_member_doc({
+                "doctype": "Passkit Member",   # your custom Doctype name
+                "passkit_id": body['result']['id'],
+                "customer_name": customer.name,
+                "passkit_status": "ENROLLED"
+            })
+        
         return {
             "status": "found",
             "member": f'https://pub2.pskt.io/{body['result']['id']}'
@@ -322,6 +351,10 @@ def delete_passkit_member(customer_id):
     # 5️⃣ If 200 but EMPTY → Enroll new member
     # -------------------------
     if response.status_code == 200 and not body:
+        exists = frappe.db.exists("Passkit Member", {"customer_name": customer.name})
+        if exists:
+            frappe.delete_doc("Passkit Member", customer.name)
+        
         return {
             "status": "not found"
         }
