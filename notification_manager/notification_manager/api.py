@@ -353,7 +353,7 @@ def delete_passkit_member(customer_id):
     if response.status_code == 200 and not body:
         exists = frappe.db.exists("Passkit Member", {"customer_name": customer.name})
         if exists:
-            frappe.delete_doc("Passkit Member", customer.name)
+            frappe.delete_doc("Passkit Member", exists)
         
         return {
             "status": "not found"
@@ -373,4 +373,14 @@ def delete_passkit_member(customer_id):
         "http_status": response.status_code,
         "body": body,
         "raw": response.text,
+    }
+    
+    
+@frappe.whitelist()
+def passkit_webhook(data):
+    frappe.log_error(data, 'passkit_webhook data')
+    
+    return {
+        "status": "success",
+        "message": "OK"
     }
