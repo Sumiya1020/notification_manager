@@ -72,6 +72,7 @@ def enroll_passkit_member_api(customer, jwt_token):
 
         "person": {
             "displayName": customer.customer_name,
+            "forename": customer.customer_name,
             "gender": "NOT_KNOWN",
             "emailAddress": customer.email_id or "",
             "mobileNumber": customer.mobile_no or customer.phone,
@@ -83,7 +84,7 @@ def enroll_passkit_member_api(customer, jwt_token):
             "erpnext_customer": customer.name
         },
 
-        "points": 0,
+        "points": customer.custom_loyalty_points,
         "status": "ENROLLED"
     }
 
@@ -118,6 +119,64 @@ def enroll_passkit_member_api(customer, jwt_token):
         "body": body,
         "raw": response.text
     }
+    
+
+def update_passkit_member_api(customer, jwt_token):
+    """
+    Update a member using ERPNext Customer data.
+    """
+
+    url = "https://api.pub2.passkit.io/members/member"
+
+    payload = {
+        "externalId": customer.name,      # Use ERPNext Customer ID
+        "tierId": PASSKIT_TIER_ID,
+        "programId": PASSKIT_PROGRAM_ID,
+
+        "person": {
+            "displayName": customer.customer_name,
+            "forename": customer.customer_name,
+            "gender": "NOT_KNOWN",
+            "emailAddress": customer.email_id or "",
+            "mobileNumber": customer.mobile_no or customer.phone,
+            "externalId": customer.name,
+        },
+
+        "metaData": {
+            "source": "ERPNext",
+            "erpnext_customer": customer.name
+        },
+
+        "points": customer.custom_loyalty_points
+    }
+
+    headers = {
+        "Authorization": jwt_token,
+        "Content-Type": "application/json"
+    }
+
+    response = requests.put(url, headers=headers, json=payload)
+    
+    try:
+        body = response.json()
+    except:
+        body = None
+        
+    if response.status_code in [200, 201]:
+        create_passkit_member_doc({
+            "doctype": "Passkit Member",   # your custom Doctype name
+            "passkit_id": body['id'],
+            "customer_name": customer.name,
+            "passkit_status": "ENROLLED"
+        })
+        
+        return {
+            "status": "updated"
+        }
+    else:
+        return {
+            "status": "failed"
+        }
     
 
 def delete_passkit_member_api(customer, jwt_token):
@@ -286,6 +345,72 @@ def get_or_create_passkit_member(customer_id):
     
 
 @frappe.whitelist()
+def update_passkit_member(customer_id):
+    # -------------------------
+    # 1️⃣ Fetch Customer
+    # -------------------------
+    customer = frappe.get_doc("Customer", customer_id)
+
+    mobile = customer.mobile_no or customer.phone
+    if not mobile:
+        frappe.throw("Customer has no mobile number")
+
+    # -------------------------
+    # 2️⃣ Generate PassKit JWT
+    # -------------------------
+    jwt_token = generate_passkit_jwt()
+
+    # -------------------------
+    # 3️⃣ Query PassKit Member List
+    # -------------------------
+    url = f"https://api.pub2.passkit.io/members/member/list/{PASSKIT_PROGRAM_ID}"
+
+    payload = {
+        "filters": {
+            "limit": 0,
+            "offset": 0,
+            "filterGroups": [
+                {
+                    "condition": "AND",
+                    "fieldFilters": [
+                        {
+                            "filterField": "mobileNumber",
+                            "filterValue": mobile,
+                            "filterOperator": "eq"
+                        }
+                    ]
+                }
+            ],
+            "orderAsc": True
+        },
+        "emailAsCsv": False
+    }
+
+    headers = {
+        "Authorization": jwt_token,
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    # If PassKit returned a valid JSON
+    try:
+        body = response.json()
+    except:
+        body = None
+        
+    
+    if response.status_code == 200 and body and len(body) > 0:
+        return update_passkit_member_api(customer, jwt_token)
+    else:
+        return {
+            "status": "not_found"
+        }
+    
+    
+    
+
+@frappe.whitelist()
 def delete_passkit_member(customer_id):
     """
     1. Looks up customer in ERPNext
@@ -356,7 +481,7 @@ def delete_passkit_member(customer_id):
             frappe.delete_doc("Passkit Member", exists)
         
         return {
-            "status": "not found"
+            "status": "not_found"
         }
 
     # -------------------------
@@ -378,7 +503,7 @@ def delete_passkit_member(customer_id):
     
 @frappe.whitelist()
 def passkit_webhook(data):
-    frappe.log_error(data, 'passkit_webhook data')
+    frappe.log_error('passkit_webhook_data', data)
     
     return {
         "status": "success",
