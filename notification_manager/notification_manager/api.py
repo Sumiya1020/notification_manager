@@ -163,17 +163,11 @@ def update_passkit_member_api(customer, jwt_token):
         body = None
         
     if response.status_code in [200, 201]:
-        create_passkit_member_doc({
-            "doctype": "Passkit Member",   # your custom Doctype name
-            "passkit_id": body['id'],
-            "customer_name": customer.name,
-            "passkit_status": "ENROLLED"
-        })
-        
         return {
             "status": "updated"
         }
     else:
+        frappe.log_error('Passkit Update', f'code: {response.status_code}, body: {body}')
         return {
             "status": "failed"
         }
@@ -220,6 +214,44 @@ def delete_passkit_member_api(customer, jwt_token):
         "body": body,
         "raw": response.text
     }
+    
+
+def set_passkit_point_api(customer, jwt_token):
+    """
+    Update a member using ERPNext Customer data.
+    """
+
+    url = "https://api.pub2.passkit.io/members/member/points/set"
+
+    payload = {
+        "externalId": customer.name,      # Use ERPNext Customer ID
+        "tierId": PASSKIT_TIER_ID,
+        "programId": PASSKIT_PROGRAM_ID,
+
+        "points": customer.custom_loyalty_points
+    }
+
+    headers = {
+        "Authorization": jwt_token,
+        "Content-Type": "application/json"
+    }
+
+    response = requests.put(url, headers=headers, json=payload)
+    
+    try:
+        body = response.json()
+    except:
+        body = None
+        
+    if response.status_code in [200, 201]:
+        return {
+            "status": "points_set"
+        }
+    else:
+        frappe.log_error('Passkit SetPoint', f'code: {response.status_code}, body: {body}')
+        return {
+            "status": "failed"
+        }
 
 
 @frappe.whitelist()
@@ -489,6 +521,93 @@ def delete_passkit_member(customer_id):
     # -------------------------
     if response.status_code == 200 and body and len(body) > 0:
         return delete_passkit_member_api(customer, jwt_token)
+
+    # -------------------------
+    # 6️⃣ Other errors
+    # -------------------------
+    return {
+        "status": "error",
+        "http_status": response.status_code,
+        "body": body,
+        "raw": response.text,
+    }
+    
+    
+@frappe.whitelist()
+def set_passkit_point(customer_id):
+    """
+    1. Looks up customer in ERPNext
+    2. Calls PassKit to check if member exists
+    3. If body empty → enroll new member
+    """
+
+    # -------------------------
+    # 1️⃣ Fetch Customer
+    # -------------------------
+    customer = frappe.get_doc("Customer", customer_id)
+
+    mobile = customer.mobile_no or customer.phone
+    if not mobile:
+        frappe.throw("Customer has no mobile number")
+
+    # -------------------------
+    # 2️⃣ Generate PassKit JWT
+    # -------------------------
+    jwt_token = generate_passkit_jwt()
+
+    # -------------------------
+    # 3️⃣ Query PassKit Member List
+    # -------------------------
+    url = f"https://api.pub2.passkit.io/members/member/list/{PASSKIT_PROGRAM_ID}"
+
+    payload = {
+        "filters": {
+            "limit": 0,
+            "offset": 0,
+            "filterGroups": [
+                {
+                    "condition": "AND",
+                    "fieldFilters": [
+                        {
+                            "filterField": "mobileNumber",
+                            "filterValue": mobile,
+                            "filterOperator": "eq"
+                        }
+                    ]
+                }
+            ],
+            "orderAsc": True
+        },
+        "emailAsCsv": False
+    }
+
+    headers = {
+        "Authorization": jwt_token,
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    # If PassKit returned a valid JSON
+    try:
+        body = response.json()
+    except:
+        body = None
+        
+    
+    # -------------------------
+    # 5️⃣ If 200 but EMPTY → Return
+    # -------------------------
+    if response.status_code == 200 and not body:
+        return {
+            "status": "not_found"
+        }
+
+    # -------------------------
+    # 4️⃣ If found member → return it
+    # -------------------------
+    if response.status_code == 200 and body and len(body) > 0:
+        return set_passkit_point_api(customer, jwt_token)
 
     # -------------------------
     # 6️⃣ Other errors
